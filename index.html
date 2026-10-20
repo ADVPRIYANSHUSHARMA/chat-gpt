@@ -1,0 +1,337 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My AI Chat</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;font-family:Arial,sans-serif;
+ background:#212121;color:#ececec;
+ display:flex;height:100vh;overflow:hidden
+}
+.sidebar{
+ width:260px;background:#171717;padding:15px;
+ display:flex;flex-direction:column;gap:12px;
+ flex-shrink:0
+}
+button{cursor:pointer;font-size:14px}
+.new-chat{
+ background:transparent;color:white;border:1px solid #555;
+ border-radius:9px;padding:12px;text-align:left
+}
+.new-chat:hover,.history button:hover{background:#303030}
+.brand{font-size:21px;font-weight:bold;padding:12px 5px}
+.history{display:flex;flex-direction:column;gap:5px;overflow:auto}
+.history button{
+ background:transparent;border:0;color:#ddd;
+ text-align:left;padding:10px;border-radius:8px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.sidebar-footer{margin-top:auto;color:#999;font-size:12px;padding:10px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{
+ height:58px;padding:0 20px;display:flex;
+ align-items:center;justify-content:space-between;
+ border-bottom:1px solid #353535
+}
+.topbar strong{font-size:17px}
+#menu{display:none;background:none;color:white;border:0;font-size:22px}
+.chat{
+ flex:1;overflow-y:auto;padding:25px 16px 150px;
+ scroll-behavior:smooth
+}
+.welcome{margin:14vh auto 0;text-align:center;max-width:650px}
+.welcome h1{font-size:30px;font-weight:500}
+.welcome p{color:#aaa}
+.message{
+ max-width:780px;margin:0 auto 25px;
+ display:flex;gap:14px;line-height:1.7;
+ overflow-wrap:anywhere
+}
+.avatar{
+ width:32px;height:32px;border-radius:50%;
+ background:#444;display:flex;align-items:center;
+ justify-content:center;flex-shrink:0;font-size:13px
+}
+.message-content{flex:1;min-width:0;white-space:pre-wrap}
+.message-content img{max-width:100%;max-height:300px;border-radius:10px}
+.message-content a{color:#8ab4f8}
+.composer-wrap{
+ position:absolute;bottom:0;left:260px;right:0;
+ padding:18px 16px 12px;
+ background:linear-gradient(transparent,#212121 20%)
+}
+.composer{max-width:780px;margin:auto}
+.inputbox{
+ background:#303030;border:1px solid #505050;
+ border-radius:22px;padding:10px 12px;
+ display:flex;align-items:flex-end;gap:10px
+}
+#prompt{
+ flex:1;background:transparent;color:white;border:0;
+ outline:none;resize:none;max-height:180px;
+ min-height:30px;font:16px Arial;padding:7px 0
+}
+.icon-btn{
+ background:transparent;border:0;color:#eee;
+ font-size:22px;padding:5px
+}
+.send{
+ background:#fff;color:#111;border:0;border-radius:50%;
+ width:36px;height:36px;font-size:19px;font-weight:bold
+}
+.hint{text-align:center;color:#999;font-size:11px;margin-top:10px}
+#fileInfo{max-width:780px;margin:0 auto 8px;color:#bbb;font-size:12px}
+@media(max-width:650px){
+ .sidebar{position:fixed;top:0;bottom:0;left:-270px;z-index:5;transition:left .2s}
+ .sidebar.open{left:0}
+ #menu{display:block}
+ .composer-wrap{left:0}
+ .chat{padding-left:12px;padding-right:12px}
+ .welcome h1{font-size:25px}
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar" id="sidebar">
+ <div class="brand">✦ My AI</div>
+ <button class="new-chat" onclick="newChat()">＋ New chat</button>
+ <div style="color:#888;font-size:12px;padding:8px 5px">Recent chats</div>
+ <div class="history" id="history"></div>
+ <div class="sidebar-footer">My AI Chat · Personal project</div>
+</aside>
+
+<main class="main">
+ <header class="topbar">
+  <div style="display:flex;align-items:center;gap:12px">
+   <button id="menu" onclick="toggleMenu()">☰</button>
+   <strong>My AI <span style="color:#aaa;font-weight:normal">▾</span></strong>
+  </div>
+  <button class="icon-btn" title="New chat" onclick="newChat()">＋</button>
+ </header>
+
+ <section class="chat" id="chat">
+  <div class="welcome" id="welcome">
+   <h1>What can I help with?</h1>
+   <p>Ask a question, write something, or upload a file.</p>
+  </div>
+ </section>
+
+ <div class="composer-wrap">
+  <div id="fileInfo"></div>
+  <div class="composer">
+   <div class="inputbox">
+    <button class="icon-btn" title="Upload a file" onclick="document.getElementById('file').click()">＋</button>
+    <input id="file" type="file" hidden
+      accept=".txt,.csv,.json,.html,.js,.css,.md,.png,.jpg,.jpeg,.webp,.pdf,.xlsx,.xls">
+    <textarea id="prompt" rows="1" placeholder="Message My AI..."></textarea>
+    <button class="send" onclick="sendMessage()" title="Send">↑</button>
+   </div>
+   <div class="hint">My AI can make mistakes. Check important information.</div>
+  </div>
+ </div>
+</main>
+
+<script>
+const chat = document.getElementById("chat");
+const promptBox = document.getElementById("prompt");
+const fileInput = document.getElementById("file");
+let messages = [];
+let selectedFile = null;
+let chats = JSON.parse(localStorage.getItem("myAIChats") || "[]");
+let activeId = Date.now();
+
+function toggleMenu(){
+ document.getElementById("sidebar").classList.toggle("open");
+}
+
+function newChat(){
+ messages = [];
+ activeId = Date.now();
+ chat.innerHTML = '<div class="welcome" id="welcome"><h1>What can I help with?</h1><p>Ask a question, write something, or upload a file.</p></div>';
+ selectedFile = null;
+ fileInput.value = "";
+ document.getElementById("fileInfo").textContent = "";
+ promptBox.value = "";
+ renderHistory();
+ document.getElementById("sidebar").classList.remove("open");
+}
+
+function addMessage(role, text, fileName){
+ const welcome = document.getElementById("welcome");
+ if(welcome) welcome.remove();
+
+ const row = document.createElement("div");
+ row.className = "message";
+
+ const avatar = document.createElement("div");
+ avatar.className = "avatar";
+ avatar.textContent = role === "user" ? "You" : "✦";
+
+ const content = document.createElement("div");
+ content.className = "message-content";
+ content.textContent = text;
+
+ if(fileName){
+  const fileLine = document.createElement("div");
+  fileLine.textContent = "📎 " + fileName;
+  fileLine.style.color = "#aaa";
+  fileLine.style.marginBottom = "8px";
+  content.prepend(fileLine);
+ }
+
+ row.append(avatar, content);
+ chat.appendChild(row);
+ chat.scrollTop = chat.scrollHeight;
+ return content;
+}
+
+function saveChat(){
+ if(!messages.length) return;
+ const index = chats.findIndex(c => c.id === activeId);
+ const item = {
+  id: activeId,
+  title: messages.find(m=>m.role==="user")?.text.slice(0,35) || "New chat",
+  messages: messages
+ };
+ if(index >= 0) chats[index] = item;
+ else chats.unshift(item);
+ chats = chats.slice(0,40);
+ localStorage.setItem("myAIChats", JSON.stringify(chats));
+ renderHistory();
+}
+
+function renderHistory(){
+ const box = document.getElementById("history");
+ box.innerHTML = "";
+ chats.forEach(c=>{
+  const b = document.createElement("button");
+  b.textContent = c.title;
+  b.onclick = ()=>loadChat(c.id);
+  box.appendChild(b);
+ });
+}
+
+function loadChat(id){
+ const item = chats.find(c=>c.id===id);
+ if(!item) return;
+ activeId = id;
+ messages = item.messages || [];
+ chat.innerHTML = "";
+ if(!messages.length){
+  chat.innerHTML = '<div class="welcome"><h1>What can I help with?</h1></div>';
+ }else{
+  messages.forEach(m=>addMessage(m.role,m.text,m.fileName));
+ }
+ document.getElementById("sidebar").classList.remove("open");
+}
+
+fileInput.addEventListener("change", ()=>{
+ selectedFile = fileInput.files[0] || null;
+ document.getElementById("fileInfo").textContent =
+  selectedFile ? "📎 " + selectedFile.name + " (" +
+  Math.round(selectedFile.size/1024) + " KB)" : "";
+});
+
+promptBox.addEventListener("keydown", e=>{
+ if(e.key==="Enter" && !e.shiftKey){
+  e.preventDefault();
+  sendMessage();
+ }
+});
+promptBox.addEventListener("input", ()=>{
+ promptBox.style.height="auto";
+ promptBox.style.height=Math.min(promptBox.scrollHeight,180)+"px";
+});
+
+async function sendMessage(){
+ const text = promptBox.value.trim();
+ if(!text && !selectedFile) return;
+
+ const file = selectedFile;
+ const fileName = file ? file.name : "";
+ const userText = text || "Please help me with this file.";
+
+ messages.push({role:"user",text:userText,fileName});
+ addMessage("user",userText,fileName);
+
+ promptBox.value="";
+ promptBox.style.height="30px";
+ selectedFile=null;
+ fileInput.value="";
+ document.getElementById("fileInfo").textContent="";
+ saveChat();
+
+ const answer = addMessage("assistant","Thinking...");
+ try{
+  const result = await getReply(userText,file);
+  answer.textContent = result;
+  messages.push({role:"assistant",text:result});
+  saveChat();
+ }catch(e){
+  answer.textContent = "Sorry, something went wrong.";
+ }
+ chat.scrollTop = chat.scrollHeight;
+}
+
+/*
+ This is a demo response engine, not a real AI model.
+ Connect a secure backend/API to get actual AI responses.
+*/
+async function getReply(text,file){
+ await new Promise(resolve=>setTimeout(resolve,500));
+
+ if(file){
+  const ext = file.name.split(".").pop().toLowerCase();
+
+  if(["txt","csv","json","html","js","css","md"].includes(ext)){
+   if(file.size > 500000)
+    return "This demo supports text files up to 500 KB. Please use a smaller file.";
+   const content = await file.text();
+   if(ext==="csv"){
+    const rows = content.trim().split(/\r?\n/);
+    const columns = (rows[0]||"").split(",");
+    return "CSV file detected.\n\nColumns:\n" +
+      columns.map((c,i)=>(i+1)+". "+c.trim()).join("\n") +
+      "\n\nRows found: "+Math.max(0,rows.length-1)+
+      "\n\nSample data:\n"+rows.slice(0,4).join("\n")+
+      "\n\nThis is a basic file preview, not AI analysis.";
+   }
+   return "File read successfully: "+file.name+
+    "\n\nFile preview:\n"+content.slice(0,3500)+
+    (content.length>3500?"\n\n(Preview shortened)":"")+
+    "\n\nConnect an AI backend for intelligent file analysis.";
+  }
+
+  if(["png","jpg","jpeg","webp"].includes(ext))
+   return "Image uploaded: "+file.name+
+    "\nThis demo cannot understand image contents. Connect a vision-capable AI backend for image analysis.";
+
+  if(["pdf","xlsx","xls"].includes(ext))
+   return "File uploaded: "+file.name+
+    "\n\nThis demo does not yet extract PDF or Excel data. A document parser and AI backend are needed to read these files and automatically create forms.";
+
+  return "File uploaded: "+file.name;
+ }
+
+ const t = text.toLowerCase();
+ if(t.includes("hello")||t.includes("hi ")||t==="hi")
+  return "Hello! 👋 Welcome to My AI. How can I help you?";
+ if(t.includes("html"))
+  return "HTML is used to build web pages. You can ask me for a real AI-generated answer after connecting an AI API.";
+ if(t.includes("form"))
+  return "To create a form, list your field names and their types. For automatic Excel or PDF form generation, this demo needs a document parser and AI backend.";
+ if(t.includes("who are you"))
+  return "I am My AI, a simple chat demo that you can customize and publish on GitHub Pages.";
+ return "Your message was received: \""+text+"\"\n\nThis is a demo chat interface. To generate intelligent, context-aware replies like ChatGPT, connect a real AI model through a secure backend.";
+}
+
+renderHistory();
+</script>
+</body>
+</html>
